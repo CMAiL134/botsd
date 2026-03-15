@@ -12,7 +12,11 @@ dp = Dispatcher()
 
 BASE_DIR = "files"
 
+# хранение сообщений программы
+user_program_message = {}
 
+
+# проверка подписки
 async def check_subscriptions(user_id):
 
     for channel in CHANNELS:
@@ -72,6 +76,7 @@ def programs_menu(category):
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
+# старт
 @dp.message(Command("start"))
 async def start(message: types.Message):
 
@@ -106,6 +111,7 @@ async def start(message: types.Message):
     )
 
 
+# проверка подписки
 @dp.callback_query(lambda c: c.data == "check_sub")
 async def check_sub(callback: types.CallbackQuery):
 
@@ -125,6 +131,7 @@ async def check_sub(callback: types.CallbackQuery):
         )
 
 
+# открыть категорию
 @dp.callback_query(lambda c: c.data.startswith("cat_"))
 async def open_category(callback: types.CallbackQuery):
 
@@ -136,19 +143,36 @@ async def open_category(callback: types.CallbackQuery):
     )
 
 
+# отправка программы
 @dp.callback_query(lambda c: c.data.startswith("prog_"))
 async def send_program(callback: types.CallbackQuery):
+
+    user_id = callback.from_user.id
+    chat_id = callback.message.chat.id
 
     data = callback.data.replace("prog_", "")
     category, file = data.split("|")
 
     path = f"{BASE_DIR}/{category}/{file}"
 
+    # удаляем старую программу
+    if user_id in user_program_message:
+
+        try:
+            await bot.delete_message(
+                chat_id,
+                user_program_message[user_id]
+            )
+        except:
+            pass
+
     await callback.answer()
 
-    await callback.message.answer_document(
+    doc = await callback.message.answer_document(
         types.FSInputFile(path)
     )
+
+    user_program_message[user_id] = doc.message_id
 
     await callback.message.answer(
         "А если хочешь индивидуальную программу, со всеми корректировками лично под тебя "
@@ -156,6 +180,7 @@ async def send_program(callback: types.CallbackQuery):
     )
 
 
+# назад
 @dp.callback_query(lambda c: c.data == "back")
 async def back(callback: types.CallbackQuery):
 
