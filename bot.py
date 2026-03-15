@@ -12,7 +12,7 @@ dp = Dispatcher()
 
 BASE_DIR = "files"
 
-# хранение сообщений программы
+# хранение сообщений программ
 user_program_message = {}
 
 
@@ -44,6 +44,13 @@ def categories_menu():
                     callback_data=f"cat_{folder}"
                 )
             ])
+
+    buttons.append([
+        InlineKeyboardButton(
+            text="❤️ ПОДДЕРЖАТЬ АВТОРА",
+            callback_data="support"
+        )
+    ])
 
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -177,6 +184,19 @@ async def send_program(callback: types.CallbackQuery):
     await callback.message.answer(
         "А если хочешь индивидуальную программу, со всеми корректировками лично под тебя "
         "то можешь ознакомиться со всеми ПРАЙСАМИ тут:\n@wedeni_skeleTT"
+    )
+
+
+# кнопка поддержки автора
+@dp.callback_query(lambda c: c.data == "support")
+async def support_author(callback: types.CallbackQuery):
+
+    await callback.answer()
+
+    await callback.message.answer_photo(
+        types.FSInputFile("images/qr.png"),
+        caption="Если хочешь поддержать автора в его продвижении, "
+        "то наведи камеру телефона на QR-код"
     )
 
 
