@@ -1,7 +1,7 @@
 import asyncio
 import os
 from aiogram import Bot, Dispatcher, types
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import Command
 from channels import CHANNELS
 
@@ -10,29 +10,7 @@ TOKEN = "8405203601:AAHbFIJJwcAjcIZaVe2uXpSVTBjppClBAmc"
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-# хранение последних сообщений
-last_messages = {}
-
-# автоматическая загрузка файлов
-PROGRAMS = {}
-
-for file in os.listdir("files"):
-    name = file.split(".")[0]
-    PROGRAMS[name] = f"files/{file}"
-
-
-async def delete_last(chat_id, user_id):
-
-    if user_id in last_messages:
-        try:
-            await bot.delete_message(chat_id, last_messages[user_id])
-        except:
-            pass
-
-
-async def save_message(user_id, message_id):
-
-    last_messages[user_id] = message_id
+BASE_DIR = "files"
 
 
 async def check_subscriptions(user_id):
@@ -47,6 +25,53 @@ async def check_subscriptions(user_id):
     return None
 
 
+# меню категорий
+def categories_menu():
+
+    buttons = []
+
+    for folder in os.listdir(BASE_DIR):
+
+        if os.path.isdir(f"{BASE_DIR}/{folder}"):
+
+            buttons.append([
+                InlineKeyboardButton(
+                    text=folder,
+                    callback_data=f"cat_{folder}"
+                )
+            ])
+
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+# меню программ
+def programs_menu(category):
+
+    buttons = []
+
+    path = f"{BASE_DIR}/{category}"
+
+    for file in os.listdir(path):
+
+        name = file.split(".")[0]
+
+        buttons.append([
+            InlineKeyboardButton(
+                text=name,
+                callback_data=f"prog_{category}|{file}"
+            )
+        ])
+
+    buttons.append([
+        InlineKeyboardButton(
+            text="⬅ Назад",
+            callback_data="back"
+        )
+    ])
+
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
 @dp.message(Command("start"))
 async def start(message: types.Message):
 
@@ -56,80 +81,88 @@ async def start(message: types.Message):
 
     if not_subscribed:
 
-        msg = await message.answer(
-            f"Для того чтоб начать пользоваться ботом подпишись на канал:\n{not_subscribed['link']}"
+        keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(
+                    text="Подписаться",
+                    url=not_subscribed["link"]
+                )],
+                [InlineKeyboardButton(
+                    text="Проверить подписку",
+                    callback_data="check_sub"
+                )]
+            ]
         )
 
-        await save_message(user_id, msg.message_id)
+        await message.answer(
+            "Для того чтоб начать пользоваться ботом подпишись на канал",
+            reply_markup=keyboard
+        )
         return
 
-    keyboard = ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text="Получить программу")]],
-        resize_keyboard=True
+    await message.answer(
+        "Выберите категорию программ:",
+        reply_markup=categories_menu()
     )
 
-    msg = await message.answer(
-        "Нажмите кнопку чтобы получить программу",
-        reply_markup=keyboard
-    )
 
-    await save_message(user_id, msg.message_id)
+@dp.callback_query(lambda c: c.data == "check_sub")
+async def check_sub(callback: types.CallbackQuery):
 
-
-@dp.message(lambda message: message.text == "Получить программу")
-async def choose_program(message: types.Message):
-
-    user_id = message.from_user.id
-
-    await delete_last(message.chat.id, user_id)
-
-    buttons = [[KeyboardButton(text=name)] for name in PROGRAMS]
-
-    keyboard = ReplyKeyboardMarkup(
-        keyboard=buttons,
-        resize_keyboard=True
-    )
-
-    msg = await message.answer(
-        "Выберите программу:",
-        reply_markup=keyboard
-    )
-
-    await save_message(user_id, msg.message_id)
-
-
-@dp.message()
-async def send_program(message: types.Message):
-
-    user_id = message.from_user.id
+    user_id = callback.from_user.id
 
     not_subscribed = await check_subscriptions(user_id)
 
     if not_subscribed:
 
-        msg = await message.answer(
-            f"Для того чтоб начать пользоваться ботом подпишись на канал:\n{not_subscribed['link']}"
+        await callback.answer("Вы не подписаны", show_alert=True)
+
+    else:
+
+        await callback.message.edit_text(
+            "Выберите категорию программ:",
+            reply_markup=categories_menu()
         )
 
-        await save_message(user_id, msg.message_id)
-        return
 
-    if message.text in PROGRAMS:
+@dp.callback_query(lambda c: c.data.startswith("cat_"))
+async def open_category(callback: types.CallbackQuery):
 
-        await delete_last(message.chat.id, user_id)
+    category = callback.data.replace("cat_", "")
 
-        msg = await message.answer_document(
-            types.FSInputFile(PROGRAMS[message.text])
-        )
+    await callback.message.edit_text(
+        f"Категория: {category}",
+        reply_markup=programs_menu(category)
+    )
 
-        await save_message(user_id, msg.message_id)
 
-        promo = await message.answer(
-            "А если хочешь индивидуальную программу, со всеми корректировками лично под тебя "
-            "то можешь ознакомиться со всеми ПРАЙСАМИ тут:\n@wedeni_skeleTT"
-        )
+@dp.callback_query(lambda c: c.data.startswith("prog_"))
+async def send_program(callback: types.CallbackQuery):
 
-        await save_message(user_id, promo.message_id)
+    data = callback.data.replace("prog_", "")
+    category, file = data.split("|")
+
+    path = f"{BASE_DIR}/{category}/{file}"
+
+    await callback.answer()
+
+    await callback.message.answer_document(
+        types.FSInputFile(path)
+    )
+
+    await callback.message.answer(
+        "А если хочешь индивидуальную программу, со всеми корректировками лично под тебя "
+        "то можешь ознакомиться со всеми ПРАЙСАМИ тут:\n@wedeni_skeleTT"
+    )
+
+
+@dp.callback_query(lambda c: c.data == "back")
+async def back(callback: types.CallbackQuery):
+
+    await callback.message.edit_text(
+        "Выберите категорию программ:",
+        reply_markup=categories_menu()
+    )
 
 
 async def main():
